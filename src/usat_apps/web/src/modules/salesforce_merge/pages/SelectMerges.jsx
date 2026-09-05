@@ -4,6 +4,9 @@ import WorkerBanner from '../components/WorkerBanner.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import RiskPills from '../components/RiskPills.jsx';
 import { api, exportUrl, sfRecordUrl } from '../lib/api.js';
+// Shared filter cell/label + the single source of truth for filter tooltips + options, used by both this
+// page and the Merge Ops random panel (FilterSelect renders each dropdown identically off these).
+import { FilterSelect, FILTER_TIP, FILTER_OPTS, sizeOptions, FCELL, FLabel } from '../components/MergeFilters.jsx';
 
 const PAGE = 200;
 
@@ -11,12 +14,6 @@ const PAGE = 200;
 const LS_KEY = 'sm_filters_v1';
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
 const PREFS = loadPrefs();
-
-// Shared filter-cell layout: uniform min-width columns that wrap evenly; each select fills its cell
-// so the controls line up in a tidy grid regardless of label length.
-const FCELL = { display: 'flex', flexDirection: 'column', minWidth: 148, flex: '0 0 auto' };
-const FSEL = { width: '100%' };
-const FLabel = ({ children, title }) => (<div className="muted small" style={{ marginBottom: 3 }} title={title}>{children}</div>);
 
 const isBlank = (v) => v == null || String(v).trim() === '';
 const val = (v) => (isBlank(v) ? '—' : String(v));
@@ -435,114 +432,34 @@ export default function SelectMerges() {
               <button type="button" className={'seg-btn' + (source === 'merge_id' ? ' on' : '')} onClick={() => setSrc('merge_id')}>Accounts with merge ids</button>
             </div>
           </div>
-          <div style={FCELL}>
-            <FLabel title="Hide or isolate groups already in the merge queue.">Queue</FLabel>
-            <select className="tb-select" style={FSEL} value={qFilter} onChange={(e) => setQFilter(e.target.value)} title="Hide or isolate groups already in the merge queue.">
-              <option value="">All</option>
-              <option value="unstaged">Not staged (hide queued/merged)</option>
-              <option value="staged">In queue / merged only</option>
-            </select>
-          </div>
-          <div style={FCELL}>
-            <FLabel title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">Size</FLabel>
-            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">
-              <option value="">Any size</option>
-              {sizeOpts.map((s) => <option key={s} value={s}>{s} accounts</option>)}
-            </select>
-          </div>
+          {/* Filters — the SAME shared <FilterSelect> component + FILTER_TIP/FILTER_OPTS defs the Merge Ops random
+              panel uses, so labels, tooltips, and options stay identical. Queue is applied client-side (no page
+              reset); the rest reset to page 1 on change. */}
+          <FilterSelect label="Queue" tip={FILTER_TIP.queue} opts={FILTER_OPTS.queue} value={qFilter} onChange={setQFilter} />
+          <FilterSelect label="Size" tip={FILTER_TIP.size} opts={sizeOptions(sizeOpts)} value={sizeState} onChange={(v) => { setSizeState(v); setPage(1); }} />
           {source === 'group' && (
-            <div style={FCELL}>
-              <FLabel title="Why they were grouped: exact match, fuzzy (similar) name, and/or nickname. A cluster can involve more than one — this keeps any that involve the chosen signal.">Signal</FLabel>
-              <select className="tb-select" style={FSEL} value={matchState} onChange={(e) => { setMatchState(e.target.value); setPage(1); }} title="Why they were grouped: exact match, fuzzy (similar) name, and/or nickname. A cluster can involve more than one — this keeps any that involve the chosen signal.">
-                <option value="">Any signal</option>
-                <option value="exact">Exact</option>
-                <option value="fuzzy">Fuzzy</option>
-                <option value="nickname">Nickname</option>
-              </select>
-            </div>
-          )}
-          {source === 'group' && (
-            <div style={FCELL}>
-              <FLabel title="Confidence level — the cluster's single strongest signal (exact > fuzzy > nickname).">Tier</FLabel>
-              <select className="tb-select" style={FSEL} value={tierState} onChange={(e) => { setTierState(e.target.value); setPage(1); }} title="Confidence level — the cluster's single strongest signal (exact > fuzzy > nickname).">
-                <option value="">Any tier</option>
-                <option value="exact">Exact</option>
-                <option value="fuzzy">Fuzzy</option>
-                <option value="nickname">Nickname</option>
-              </select>
-            </div>
-          )}
-          {source === 'group' && (
-            <div style={FCELL}>
-              <FLabel title="Best (highest) name-similarity score among the cluster's pairs, 0–100.">Min similarity</FLabel>
-              <select className="tb-select" style={FSEL} value={simState} onChange={(e) => { setSimState(e.target.value); setPage(1); }} title="Best (highest) name-similarity score among the cluster's pairs, 0–100.">
-                <option value="">Any score</option>
-                <option value="95">≥ 95</option>
-                <option value="90">≥ 90</option>
-                <option value="85">≥ 85</option>
-                <option value="80">≥ 80</option>
-              </select>
-            </div>
+            <>
+              <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={FILTER_OPTS.signal} value={matchState} onChange={(v) => { setMatchState(v); setPage(1); }} />
+              <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={FILTER_OPTS.tier} value={tierState} onChange={(v) => { setTierState(v); setPage(1); }} />
+              <FilterSelect label="Min similarity" tip={FILTER_TIP.minSim} opts={FILTER_OPTS.minSim} value={simState} onChange={(v) => { setSimState(v); setPage(1); }} />
+            </>
           )}
           {source === 'merge_id' && (
-            <div style={FCELL}>
-              <FLabel title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">Which list</FLabel>
-              <select className="tb-select" style={FSEL} value={whichState} onChange={(e) => { setWhichState(e.target.value); setPage(1); }} title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">
-                <option value="">Any list</option>
-                <option value="exact">Exact</option>
-                <option value="fuzzy">Fuzzy</option>
-                <option value="nickname">Nickname</option>
-              </select>
-            </div>
+            <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={FILTER_OPTS.whichList} value={whichState} onChange={(v) => { setWhichState(v); setPage(1); }} />
           )}
           {source === 'group' && (
             <>
-              <div style={FCELL}>
-                <FLabel title="Whether the cluster carries any Membership Platform merge ID.">Merge ID</FLabel>
-                <select className="tb-select" style={FSEL} value={midState} onChange={(e) => { setMidState(e.target.value); setPage(1); }} title="Whether the cluster carries any Membership Platform merge ID.">
-                  <option value="">All</option><option value="has">Has merge ID</option><option value="none">No merge ID</option>
-                </select>
-              </div>
-              <div style={FCELL}>
-                <FLabel title="Whether any account in the cluster has a membership number.">Membership #</FLabel>
-                <select className="tb-select" style={FSEL} value={memState} onChange={(e) => { setMemState(e.target.value); setPage(1); }} title="Whether any account in the cluster has a membership number.">
-                  <option value="">All</option><option value="has">Has member #</option><option value="none">No member #</option>
-                </select>
-              </div>
-              <div style={FCELL}>
-                <FLabel title="Whether any account in the group is a Foundation constituent.">Foundation</FLabel>
-                <select className="tb-select" style={FSEL} value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }} title="Whether any account in the group is a Foundation constituent.">
-                  <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
-                </select>
-              </div>
-              <div style={FCELL}>
-                <FLabel title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal</FLabel>
-                <select className="tb-select" style={FSEL} value={portalState} onChange={(e) => { setPortalState(e.target.value); setPage(1); }} title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal).">
-                  <option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option>
-                </select>
-              </div>
+              <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={FILTER_OPTS.mergeId} value={midState} onChange={(v) => { setMidState(v); setPage(1); }} />
+              <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={FILTER_OPTS.member} value={memState} onChange={(v) => { setMemState(v); setPage(1); }} />
+              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
+              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
             </>
           )}
           {source === 'merge_id' && (
             <>
-              <div style={FCELL}>
-                <FLabel title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">Bucket</FLabel>
-                <select className="tb-select" style={FSEL} value={bkState} onChange={(e) => { setBkState(e.target.value); setPage(1); }} title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">
-                  <option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option>
-                </select>
-              </div>
-              <div style={FCELL}>
-                <FLabel title="Whether any account in the group is a Foundation constituent.">Foundation</FLabel>
-                <select className="tb-select" style={FSEL} value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }} title="Whether any account in the group is a Foundation constituent.">
-                  <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
-                </select>
-              </div>
-              <div style={FCELL}>
-                <FLabel title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal</FLabel>
-                <select className="tb-select" style={FSEL} value={portalState} onChange={(e) => { setPortalState(e.target.value); setPage(1); }} title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal).">
-                  <option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option>
-                </select>
-              </div>
+              <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={FILTER_OPTS.bucket} value={bkState} onChange={(v) => { setBkState(v); setPage(1); }} />
+              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
+              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
             </>
           )}
           {anyFilter && (

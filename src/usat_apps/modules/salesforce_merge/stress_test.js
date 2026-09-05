@@ -223,7 +223,7 @@ async function select_targets(o, stamp) {
   if (o.min_size && filters.size_min == null) filters.size_min = o.min_size;
   if (o.max_size && filters.size_max == null) filters.size_max = o.max_size;
   if (o.foundation && !filters.foundation_state) filters.foundation_state = o.foundation;
-  const allKeys = await reviews.matching_keys(view, { filters, colFilters: o.colFilters || {} }, q);
+  const allKeys = await reviews.matching_keys(view, { filters, colFilters: o.colFilters || {}, queue_filter: o.queue_filter }, q);
   const pool = allKeys.length;
   const picked = sample(allKeys, o.count, o.seed);
   const resolved = isMergeId

@@ -130,7 +130,7 @@ function mount(app) {
       const stamp = await harness.get_dataset_stamp();
       const source = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge_id' : 'group';
       // Full Select-Merges filter set, passed straight through to matching_keys (filter_cols + filter_map).
-      const o = { env: stamp.env, source, filters: b.filters || {}, colFilters: b.colFilters || {},
+      const o = { env: stamp.env, source, filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter,
         count: Math.max(1, Math.min(500, Number(b.count) || 10)), seed: Number(b.seed) || (Date.now() % 100000) };
       const sel = await harness.select_targets(o, stamp);
       const ids = await harness.queue_and_approve(sel.entries);
@@ -143,7 +143,7 @@ function mount(app) {
     try {
       const b = req.body || {};
       const view = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge-id' : 'duplicates';
-      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {} });
+      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter });
       res.json({ ok: true, count });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });

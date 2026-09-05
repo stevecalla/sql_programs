@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api.js';
 import { track } from '../../../lib/track.js';
 import LiveLog from '../../../components/LiveLog.jsx';
+import { FilterSelect, FILTER_TIP, FILTER_OPTS, sizeOptions } from '../components/MergeFilters.jsx';
 import '../merge.css';
 
 const META = {
@@ -118,8 +119,6 @@ export default function MergeOps() {
   const [approved, setApproved] = useState(null);
   const [approvedRows, setApprovedRows] = useState([]);
   const [rSource, setRSource] = useState(() => readPref('r_source', 'duplicate'));
-  const [rMin, setRMin] = useState(() => readPref('r_min', '2'));
-  const [rMax, setRMax] = useState(() => readPref('r_max', '4'));
   const [rSize, setRSize] = useState(() => readPref('r_size', ''));   // merge-id: exact group size (matches Select Merges' Size)
   const [rCount, setRCount] = useState(() => readPref('r_count', '10'));
   const [rSeed, setRSeed] = useState(() => readPref('r_seed', ''));   // persisted as typed; blank = new random each run
@@ -132,6 +131,10 @@ export default function MergeOps() {
   const [rMinSim, setRMinSim] = useState(() => readPref('r_min_sim', ''));
   const [rMergeId, setRMergeId] = useState(() => readPref('r_merge_id', ''));
   const [rMember, setRMember] = useState(() => readPref('r_member', ''));
+  // Queue filter — mirrors Select Merges' "Queue" filter exactly ('' all | 'unstaged' hide queued/merged |
+  // 'staged' only queued/merged). Default 'unstaged' so a random sample skips sets already queued/merged
+  // (a merged-then-restored set re-enters the pool), so a Count of N reliably runs ~N fresh merges.
+  const [rQueueFilter, setRQueueFilter] = useState(() => readPref('r_queue_filter', 'unstaged'));
   const [facets, setFacets] = useState({});
   const [matchCount, setMatchCount] = useState(null);   // live "N sets match these filters"
   // activity logs
@@ -193,12 +196,13 @@ export default function MergeOps() {
     try {
       localStorage.setItem('sm_batch_prefs', JSON.stringify({
         batch_mode: batchMode, run_mode: runMode, restore_after: restoreAfter, stamp_merged: stampMerged, attach_dossier: attachDossier,
-        r_source: rSource, r_min: rMin, r_max: rMax, r_count: rCount, r_seed: rSeed,
+        r_source: rSource, r_count: rCount, r_seed: rSeed,
         r_foundation: rFoundation, r_portal: rPortal, r_tier: rTier, r_signal: rSignal,
         r_which_list: rWhichList, r_bucket: rBucket, r_min_sim: rMinSim, r_merge_id: rMergeId, r_member: rMember, r_size: rSize,
+        r_queue_filter: rQueueFilter,
       }));
     } catch (e) { /* ignore */ }
-  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rMin, rMax, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember, rSize]);
+  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember, rSize, rQueueFilter]);
   // Record the restore job id onto the persisted run so a reattach re-shows the restore phase (and doesn't re-fire it).
   const persistRestoreJobId = (id) => { try { const s = JSON.parse(localStorage.getItem('sm_active_batch') || 'null'); if (s) { s.restore_job_id = id; localStorage.setItem('sm_active_batch', JSON.stringify(s)); } } catch (e) { /* ignore */ } };
   const isTerminal = (s) => s === 'done' || s === 'error' || s === 'cancelled';   // 'paused' is NOT terminal (resumable)
@@ -265,8 +269,7 @@ export default function MergeOps() {
   const buildFilters = () => {
     const filters = {}; const colFilters = {};
     if (rSource === 'duplicate') {
-      if (rMin) filters.size_min = rMin;
-      if (rMax) filters.size_max = rMax;
+      if (rSize) filters.size_eq = rSize;            // exact cluster size — same as Select Merges' Size
       if (rTier) filters.tier = rTier;               // exact|fuzzy|nickname
       if (rSignal) filters.match_type = rSignal;     // exact|fuzzy|nickname (involves)
       if (rMinSim) filters.best_min = rMinSim;       // min best-pair similarity
@@ -283,19 +286,26 @@ export default function MergeOps() {
     }
     return { filters, colFilters };
   };
+  // Reset every random-sample filter to permissive (mirrors Select Merges' Clear filters — all blank,
+  // Queue back to All). Count/Seed are sampler controls, not filters, so they're left alone.
+  const clearRandomFilters = () => {
+    setRQueueFilter(''); setRSize(''); setRSignal(''); setRTier(''); setRMinSim('');
+    setRMergeId(''); setRMember(''); setRWhichList(''); setRBucket(''); setRFoundation(''); setRPortal('');
+  };
+  const anyRandomFilter = !!(rQueueFilter || rSize || rSignal || rTier || rMinSim || rMergeId || rMember || rWhichList || rBucket || rFoundation || rPortal);
   // Live "N sets match" count, debounced, recomputed as the random-mode filters change.
   useEffect(() => {
     if (batchMode !== 'random') { setMatchCount(null); return undefined; }
     let stop = false;
     const { filters, colFilters } = buildFilters();
     const t = setTimeout(() => {
-      api.opsBatchCount({ source: rSource, filters, colFilters })
+      api.opsBatchCount({ source: rSource, filters, colFilters, queue_filter: rQueueFilter })
         .then((r) => { if (!stop) setMatchCount(typeof r.count === 'number' ? r.count : null); })
         .catch(() => { if (!stop) setMatchCount(null); });
     }, 300);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchMode, rSource, rMin, rMax, rSize, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal]);
+  }, [batchMode, rSource, rSize, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal, rQueueFilter]);
 
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const dirty = Object.keys(draft).length > 0;
@@ -328,7 +338,7 @@ export default function MergeOps() {
     let stagedIds = []; let seedVal = null;   // captured for persistence so a reattach can resume the restore-afterward chain
     const { filters, colFilters } = buildFilters();
     const getIds = batchMode === 'random'
-      ? api.opsBatchStage({ source: rSource, count: rCount, seed: rSeed || undefined, filters, colFilters })
+      ? api.opsBatchStage({ source: rSource, count: rCount, seed: rSeed || undefined, filters, colFilters, queue_filter: rQueueFilter })
         .then((r) => { seedVal = r.seed; setStagedSeed(r.seed); setRunNote('Staged ' + r.staged + ' random set(s) (seed ' + r.seed + ', pool ' + r.pool + ', env ' + r.env + ').'); return r.ids || []; })
       : api.mergeQueue('approved').then((r) => (r.rows || []).map((x) => x.id).filter(Boolean));
     getIds
@@ -527,25 +537,29 @@ export default function MergeOps() {
               {/* Filters below the source — the same facets as the Select Merges list. */}
               <div className="mx-scope" style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', padding: '8px 10px', borderRadius: 'var(--radius)' }}>
                 <span className="mx-scope-label small" style={{ width: '100%' }}>Filters (narrow the sample, like Select Merges):</span>
+                {/* 100% parity with the Select Merges filter bar — SAME shared <FilterSelect> component + the SAME
+                    FILTER_TIP / FILTER_OPTS defs, so labels, tooltips, and options can't drift. Order matches too:
+                    group/duplicate → Queue, Size, Signal, Tier, Min similarity, Merge ID, Membership #, Foundation,
+                    Customer portal; merge-id → Queue, Size, Which list, Bucket, Foundation, Customer portal. */}
+                <FilterSelect label="Queue" tip={FILTER_TIP.queue} opts={FILTER_OPTS.queue} value={rQueueFilter} onChange={setRQueueFilter} />
+                <FilterSelect label="Size" tip={FILTER_TIP.size} opts={sizeOptions(facets.size)} value={rSize} onChange={setRSize} />
                 {rSource === 'duplicate' ? (
                   <>
-                    <label className="small" title="Only clusters within this size band (number of accounts).">Min size<br /><input type="number" value={rMin} onChange={(e) => setRMin(e.target.value)} style={{ width: 64 }} /></label>
-                    <label className="small" title="Only clusters within this size band (number of accounts).">Max size<br /><input type="number" value={rMax} onChange={(e) => setRMax(e.target.value)} style={{ width: 64 }} /></label>
-                    <label className="small" title="Match signal that formed the cluster — keeps clusters that INVOLVE this signal.">Signal<br /><span className="tb-select"><select value={rSignal} onChange={(e) => setRSignal(e.target.value)}><option value="">any signal</option><option value="exact">exact</option><option value="fuzzy">fuzzy</option><option value="nickname">nickname</option></select></span></label>
-                    <label className="small" title="Confidence tier — the cluster's single strongest signal.">Tier<br /><span className="tb-select"><select value={rTier} onChange={(e) => setRTier(e.target.value)}><option value="">any tier</option><option value="exact">exact</option><option value="fuzzy">fuzzy</option><option value="nickname">nickname</option></select></span></label>
-                    <label className="small" title="Minimum best name-similarity score (0–100) among the cluster's pairs.">Min similarity<br /><span className="tb-select"><select value={rMinSim} onChange={(e) => setRMinSim(e.target.value)}><option value="">any score</option>{[50, 60, 70, 80, 90, 95].map((v) => <option key={v} value={v}>{v}+</option>)}</select></span></label>
-                    <label className="small" title="Whether the cluster already carries a Salesforce merge ID.">Merge ID<br /><span className="tb-select"><select value={rMergeId} onChange={(e) => setRMergeId(e.target.value)}><option value="">all</option><option value="has">has</option><option value="none">none</option></select></span></label>
-                    <label className="small" title="Whether any member of the cluster carries a membership number.">Membership #<br /><span className="tb-select"><select value={rMember} onChange={(e) => setRMember(e.target.value)}><option value="">all</option><option value="has">has</option><option value="none">none</option></select></span></label>
+                    <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={FILTER_OPTS.signal} value={rSignal} onChange={setRSignal} />
+                    <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={FILTER_OPTS.tier} value={rTier} onChange={setRTier} />
+                    <FilterSelect label="Min similarity" tip={FILTER_TIP.minSim} opts={FILTER_OPTS.minSim} value={rMinSim} onChange={setRMinSim} />
+                    <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={FILTER_OPTS.mergeId} value={rMergeId} onChange={setRMergeId} />
+                    <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={FILTER_OPTS.member} value={rMember} onChange={setRMember} />
                   </>
                 ) : (
                   <>
-                    <label className="small" title="How many accounts are in the group (2 = a pair). Options come from duplicate clusters, which are always 2 or more — so there's no “1” (a single account isn't a duplicate). A merge-id group can be 1 record, but those aren't mergeable and this filter can't select them.">Size<br /><span className="tb-select"><select value={rSize} onChange={(e) => setRSize(e.target.value)}><option value="">Any size</option>{(facets.size || []).map((s) => <option key={s} value={String(s)}>{s} accounts</option>)}</select></span></label>
-                    <label className="small" title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">Which list<br /><span className="tb-select"><select value={rWhichList} onChange={(e) => setRWhichList(e.target.value)}><option value="">Any list</option><option value="exact">Exact</option><option value="fuzzy">Fuzzy</option><option value="nickname">Nickname</option></select></span></label>
-                    <label className="small" title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">Bucket<br /><span className="tb-select"><select value={rBucket} onChange={(e) => setRBucket(e.target.value)}><option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option></select></span></label>
+                    <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={FILTER_OPTS.whichList} value={rWhichList} onChange={setRWhichList} />
+                    <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={FILTER_OPTS.bucket} value={rBucket} onChange={setRBucket} />
                   </>
                 )}
-                <label className="small" title="Whether any account in the group is a Foundation constituent.">Foundation<br /><span className="tb-select"><select value={rFoundation} onChange={(e) => setRFoundation(e.target.value)}><option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option></select></span></label>
-                <label className="small" title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal<br /><span className="tb-select"><select value={rPortal} onChange={(e) => setRPortal(e.target.value)}><option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option></select></span></label>
+                <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={rFoundation} onChange={setRFoundation} />
+                <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={rPortal} onChange={setRPortal} />
+                {anyRandomFilter && <div style={{ alignSelf: 'flex-end' }}><button type="button" className="linkbtn" onClick={clearRandomFilters} title="Reset all filters to permissive (Count and Seed are left as-is)">Clear filters</button></div>}
               </div>
             </div>
           )}
