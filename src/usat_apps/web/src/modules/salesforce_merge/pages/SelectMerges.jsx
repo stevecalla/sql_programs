@@ -165,13 +165,17 @@ export default function SelectMerges() {
 
   useEffect(() => {
     const load = source === 'merge_id'
-      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, size: sizeState, which_list: whichState })
-      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
+      ? api.mergeGroups({ page, page_size: PAGE, q: filter, queue_filter: qFilter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, size: sizeState, which_list: whichState })
+      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, queue_filter: qFilter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
     load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); }).catch((e) => setErr(e.message));
-  }, [source, page, filter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
+  }, [source, page, filter, qFilter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
 
-  // Populate the cluster-size dropdown from the consolidated facets (distinct group sizes).
-  useEffect(() => { api.duplicatesFacets().then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => {}); }, []);
+  // Populate the Size dropdown from the facets for the CURRENT source (duplicate clusters vs merge-id groups),
+  // so the available sizes match what this view actually contains (mirrors the Merge Ops random panel).
+  useEffect(() => {
+    const p = source === 'merge_id' ? api.mergeIdFacets() : api.duplicatesFacets();
+    p.then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => setSizeOpts([]));
+  }, [source]);
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   // Persist filter selections so they become the user's default next time.
@@ -435,7 +439,7 @@ export default function SelectMerges() {
           {/* Filters — the SAME shared <FilterSelect> component + FILTER_TIP/FILTER_OPTS defs the Merge Ops random
               panel uses, so labels, tooltips, and options stay identical. Queue is applied client-side (no page
               reset); the rest reset to page 1 on change. */}
-          <FilterSelect label="Queue" tip={FILTER_TIP.queue} opts={FILTER_OPTS.queue} value={qFilter} onChange={setQFilter} />
+          <FilterSelect label="Queue" tip={FILTER_TIP.queue} opts={FILTER_OPTS.queue} value={qFilter} onChange={(v) => { setQFilter(v); setPage(1); }} />
           <FilterSelect label="Size" tip={FILTER_TIP.size} opts={sizeOptions(sizeOpts)} value={sizeState} onChange={(v) => { setSizeState(v); setPage(1); }} />
           {source === 'group' && (
             <>
@@ -491,11 +495,7 @@ export default function SelectMerges() {
           )}
           {bulkMsg && <p className="muted small" style={{ color: 'var(--accent)', margin: '0 0 6px' }}>{bulkMsg}</p>}
           <div className="dt-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            {clusters.filter((c) => {
-              if (!qFilter) return true;
-              const s = queueStateByKey[c.cluster]; const staged = s === 'queued' || s === 'merged';
-              return qFilter === 'staged' ? staged : !staged;
-            }).map((c, i) => {
+            {clusters.map((c, i) => {
               const cstate = queueStateByKey[c.cluster];
               const failedReason = failedReasonByKey[c.cluster];
               const badge = cstate === 'queued' ? { t: 'in queue', bg: 'var(--amber-bg)', c: 'var(--amber)', title: 'This set is already in the merge queue.' }
@@ -522,7 +522,6 @@ export default function SelectMerges() {
               );
             })}
             {clusters.length === 0 && <p className="muted small">No records.</p>}
-            {clusters.length > 0 && qFilter && clusters.filter((c) => { const s = queueStateByKey[c.cluster]; const staged = s === 'queued' || s === 'merged'; return qFilter === 'staged' ? staged : !staged; }).length === 0 && <p className="muted small">No groups on this page match the queue filter.</p>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <button className="btn" style={{ width: 'auto' }} disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>

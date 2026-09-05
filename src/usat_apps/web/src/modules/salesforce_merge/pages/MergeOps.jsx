@@ -135,6 +135,7 @@ export default function MergeOps() {
   // 'staged' only queued/merged). Default 'unstaged' so a random sample skips sets already queued/merged
   // (a merged-then-restored set re-enters the pool), so a Count of N reliably runs ~N fresh merges.
   const [rQueueFilter, setRQueueFilter] = useState(() => readPref('r_queue_filter', 'unstaged'));
+  const [rSearch, setRSearch] = useState(() => readPref('r_search', ''));   // name/id search — same pool narrowing as Select Merges' list search
   const [facets, setFacets] = useState({});
   const [matchCount, setMatchCount] = useState(null);   // live "N sets match these filters"
   // activity logs
@@ -199,10 +200,10 @@ export default function MergeOps() {
         r_source: rSource, r_count: rCount, r_seed: rSeed,
         r_foundation: rFoundation, r_portal: rPortal, r_tier: rTier, r_signal: rSignal,
         r_which_list: rWhichList, r_bucket: rBucket, r_min_sim: rMinSim, r_merge_id: rMergeId, r_member: rMember, r_size: rSize,
-        r_queue_filter: rQueueFilter,
+        r_queue_filter: rQueueFilter, r_search: rSearch,
       }));
     } catch (e) { /* ignore */ }
-  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember, rSize, rQueueFilter]);
+  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember, rSize, rQueueFilter, rSearch]);
   // Record the restore job id onto the persisted run so a reattach re-shows the restore phase (and doesn't re-fire it).
   const persistRestoreJobId = (id) => { try { const s = JSON.parse(localStorage.getItem('sm_active_batch') || 'null'); if (s) { s.restore_job_id = id; localStorage.setItem('sm_active_batch', JSON.stringify(s)); } } catch (e) { /* ignore */ } };
   const isTerminal = (s) => s === 'done' || s === 'error' || s === 'cancelled';   // 'paused' is NOT terminal (resumable)
@@ -289,23 +290,23 @@ export default function MergeOps() {
   // Reset every random-sample filter to permissive (mirrors Select Merges' Clear filters — all blank,
   // Queue back to All). Count/Seed are sampler controls, not filters, so they're left alone.
   const clearRandomFilters = () => {
-    setRQueueFilter(''); setRSize(''); setRSignal(''); setRTier(''); setRMinSim('');
+    setRQueueFilter(''); setRSearch(''); setRSize(''); setRSignal(''); setRTier(''); setRMinSim('');
     setRMergeId(''); setRMember(''); setRWhichList(''); setRBucket(''); setRFoundation(''); setRPortal('');
   };
-  const anyRandomFilter = !!(rQueueFilter || rSize || rSignal || rTier || rMinSim || rMergeId || rMember || rWhichList || rBucket || rFoundation || rPortal);
+  const anyRandomFilter = !!(rQueueFilter || rSearch || rSize || rSignal || rTier || rMinSim || rMergeId || rMember || rWhichList || rBucket || rFoundation || rPortal);
   // Live "N sets match" count, debounced, recomputed as the random-mode filters change.
   useEffect(() => {
     if (batchMode !== 'random') { setMatchCount(null); return undefined; }
     let stop = false;
     const { filters, colFilters } = buildFilters();
     const t = setTimeout(() => {
-      api.opsBatchCount({ source: rSource, filters, colFilters, queue_filter: rQueueFilter })
+      api.opsBatchCount({ source: rSource, filters, colFilters, queue_filter: rQueueFilter, q: rSearch })
         .then((r) => { if (!stop) setMatchCount(typeof r.count === 'number' ? r.count : null); })
         .catch(() => { if (!stop) setMatchCount(null); });
     }, 300);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchMode, rSource, rSize, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal, rQueueFilter]);
+  }, [batchMode, rSource, rSize, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal, rQueueFilter, rSearch]);
 
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const dirty = Object.keys(draft).length > 0;
@@ -338,7 +339,7 @@ export default function MergeOps() {
     let stagedIds = []; let seedVal = null;   // captured for persistence so a reattach can resume the restore-afterward chain
     const { filters, colFilters } = buildFilters();
     const getIds = batchMode === 'random'
-      ? api.opsBatchStage({ source: rSource, count: rCount, seed: rSeed || undefined, filters, colFilters, queue_filter: rQueueFilter })
+      ? api.opsBatchStage({ source: rSource, count: rCount, seed: rSeed || undefined, filters, colFilters, queue_filter: rQueueFilter, q: rSearch })
         .then((r) => { seedVal = r.seed; setStagedSeed(r.seed); setRunNote('Staged ' + r.staged + ' random set(s) (seed ' + r.seed + ', pool ' + r.pool + ', env ' + r.env + ').'); return r.ids || []; })
       : api.mergeQueue('approved').then((r) => (r.rows || []).map((x) => x.id).filter(Boolean));
     getIds
@@ -533,6 +534,7 @@ export default function MergeOps() {
                 <label className="small" title="Which data list to sample from: the consolidated duplicate clusters, or the Salesforce merge-id groups.">Source<br /><span className="tb-select"><select value={rSource} onChange={(e) => setRSource(e.target.value)}><option value="duplicate">duplicate</option><option value="merge-id">merge-id</option></select></span></label>
                 <label className="small" title="How many sets to select and run.">Count<br /><input type="number" value={rCount} onChange={(e) => setRCount(e.target.value)} style={{ width: 80 }} /></label>
                 <label className="small" title="Reproducibility: the same seed picks the same random sample. Leave blank for a fresh random pick each time.">Seed (blank = random)<br /><input type="number" value={rSeed} onChange={(e) => setRSeed(e.target.value)} style={{ width: 110 }} /></label>
+                <label className="small" title="Narrow the pool by name or id before sampling — same name/id search as the Select Merges list.">Search (name/id)<br /><input type="text" value={rSearch} onChange={(e) => setRSearch(e.target.value)} placeholder="name, id…" style={{ width: 150 }} /></label>
               </div>
               {/* Filters below the source — the same facets as the Select Merges list. */}
               <div className="mx-scope" style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', padding: '8px 10px', borderRadius: 'var(--radius)' }}>
