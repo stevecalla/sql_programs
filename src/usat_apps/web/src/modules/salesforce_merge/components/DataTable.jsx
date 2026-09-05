@@ -74,7 +74,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
     const live = () => !cancelled && !ac.signal.aborted;
     setLoading(true); setErr('');
     fetcher({ q, sort: sortKey || undefined, dir: sortDir, page, page_size: pageSize, colFilters }, { signal: ac.signal })
-      .then((d) => { if (live()) setData({ rows: d.rows || [], total: d.total || 0 }); })
+      .then((d) => { if (live()) setData({ rows: d.rows || [], total: d.total || 0, suffix: d.suffix || '' }); })
       .catch((e) => { if (live() && e && e.name !== 'AbortError') setErr(e.message); })
       .finally(() => { if (live()) setLoading(false); });
     return () => { cancelled = true; ac.abort(); };   // abort the prior request when query/sort/page changes
@@ -95,6 +95,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   }, [server, data.rows, rows, q, sortKey, sortDir, colFiltersKey, columns]);
 
   const total = Number(server ? data.total : view.length) || 0;
+  const countSuffix = server && data.suffix ? ' · ' + data.suffix : '';   // e.g. "· 10,327 accounts" (companion count)
   const pages = Math.max(1, Math.ceil(total / pageSize));
   // If a search/filter/chip shrinks the result below the current page, snap back into range
   // (otherwise Prev/Next can land on an empty page and look broken).
@@ -190,7 +191,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
             ? <span className="dt-loading"><span className="spinner" aria-hidden="true" /> Searching… {elapsed.toFixed(1)}s
                 <button type="button" className="btn dt-stop" style={{ marginLeft: 8, padding: '1px 8px' }} onClick={stopSearch} title="Stop this search and keep the last results">Stop</button>
               </span>
-            : `${Number(total).toLocaleString()} rows`}
+            : `${Number(total).toLocaleString()} rows${countSuffix}`}
           {!loading && server ? ` · page ${page} / ${pages}` : ''}
         </span>
       </div>
@@ -252,7 +253,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
       </table>
       </div>
       <div className="dt-footer">
-        <span className="muted small">{loading ? 'Loading…' : `${Number(total).toLocaleString()} rows`}</span>
+        <span className="muted small">{loading ? 'Loading…' : `${Number(total).toLocaleString()} rows${countSuffix}`}</span>
         {server && (
           <span className="pager">
             <button className="btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹ Prev</button>

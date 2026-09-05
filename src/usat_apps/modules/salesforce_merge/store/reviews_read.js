@@ -218,8 +218,26 @@ const DUP_SPEC = {
   queue_key: 'Consolidated_Group_Key__c',   // group key the Queue filter joins on (see queue_join)
   default_sort: 'size',
 };
+// ACCOUNTS across the matching consolidated clusters (sum of cluster sizes) — the per-account companion
+// to the cluster count, from the same build_clauses (+ queue join). Ties out to the dashboard's
+// "Duplicate accounts" (10,327 across 5,120 clusters).
+async function duplicates_account_total(opts = {}, query = real_query) {
+  const { where_sql, join_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, DUP_SPEC);
+  const rows = await query('SELECT COALESCE(SUM(CAST(Group_Record_Count__c AS UNSIGNED)), 0) AS n FROM `' +
+    DUP_SPEC.table + '` ' + join_sql + ' ' + where_sql, params);
+  return rows && rows[0] ? Number(rows[0].n) : 0;
+}
 async function list_duplicates(opts = {}, query = real_query) {
-  return paged(cfg.RESULT_CONSOLIDATED_TABLE, DUP_SPEC, { ...opts, dir: opts.dir || 'DESC' }, query);
+  const o = { ...opts, dir: opts.dir || 'DESC' };
+  const res = await paged(cfg.RESULT_CONSOLIDATED_TABLE, DUP_SPEC, o, query);
+  res.accounts = await duplicates_account_total(o, query);   // per-account companion to the cluster total
+  return res;
+}
+// ACCOUNT companion to count_matching (batch sampler): accounts across the matching sets.
+async function count_accounts(view, opts = {}, query = real_query) {
+  if (view === 'merge-id') return merge_group_account_total(flatten_mergeid_opts(opts), query);
+  if (view === 'duplicates') return duplicates_account_total(opts, query);
+  return 0;
 }
 
 // The consolidated result table is rebuilt each finder run with no indexes, but the merge-id size
@@ -312,6 +330,12 @@ async function list_merge_id(opts = {}, query = real_query) {
     const m = new Map((sizes || []).map((x) => [x.k, x.n]));
     for (const r of res.rows) r.size = (r.cluster && m.has(r.cluster)) ? m.get(r.cluster) : null;
   }
+  // Group companion: how many distinct merge-id GROUPS the filtered accounts span (this page's total is
+  // accounts). Same WHERE the list used, so "N accounts · G groups" reconciles with the merge-id view.
+  const gq = build_clauses({ ...o, page: 1, page_size: 1 }, MR_SPEC);
+  const gr = await query('SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `' + cfg.RESULT_MERGE_ID_REVIEW_TABLE +
+    '` ' + (gq.join_sql || '') + ' ' + gq.where_sql, gq.params);
+  res.groups = gr && gr[0] ? Number(gr[0].n) : 0;
   return res;
 }
 
@@ -465,12 +489,23 @@ async function merge_group_keys(opts = {}, query = real_query) {
     " GROUP BY Salesforce_Merge_Id__c" + having_sql, params);
   return (rows || []).map((r) => r.k).filter(Boolean);
 }
+// ACCOUNTS across the matching merge-id groups (sum of group sizes) — the per-account companion to
+// merge_group_count. Same shared clauses (+ queue join), so it ties out to the dashboard's per-bucket
+// account counts (e.g. bucket=in_both -> 3,689) and to the account column everywhere it's shown.
+async function merge_group_account_total(opts = {}, query = real_query) {
+  const { T, join_sql, where_sql, having_sql, params } = merge_group_clauses(opts);
+  const rows = await query(
+    "SELECT COALESCE(SUM(c), 0) AS n FROM (SELECT COUNT(*) AS c FROM `" + T + "`" + join_sql + " " + where_sql +
+    " GROUP BY Salesforce_Merge_Id__c" + having_sql + ") x", params);
+  return rows && rows[0] ? Number(rows[0].n) : 0;
+}
 async function list_merge_groups(opts = {}, query = real_query) {
   const page = clamp_int(opts.page, 1, 1, 1e9);
   const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
   const offset = (page - 1) * page_size;
   const { T, join_sql, where_sql, having_sql, params } = merge_group_clauses(opts);   // shared with the batch sampler
   const total = await merge_group_count(opts, query);
+  const accounts = await merge_group_account_total(opts, query);   // per-account companion to the group total
   const rows = await query(
     "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
     "GROUP_CONCAT(DISTINCT NULLIF(TRIM(CONCAT(COALESCE(First_Name__c, ''), ' ', COALESCE(Last_Name__c, ''))), '') SEPARATOR ';') AS `names`, " +
@@ -485,7 +520,7 @@ async function list_merge_groups(opts = {}, query = real_query) {
     size: Number(r.size) || 0, signal: "merge id", cluster_key: r.cluster_key || '',
     portal: Number(r.portal) || 0, foundation: Number(r.foundation) || 0,
   }));
-  return { rows: out, total, page, page_size };
+  return { rows: out, total, accounts, page, page_size };
 }
 
 async function merge_group_account_ids(merge_id, query = real_query) {
@@ -664,6 +699,7 @@ function export_sql(view, opts = {}) {
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows, export_sql,
   list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups, resolve_duplicate_groups, pick_bulk_survivor,
-  matching_keys, count_matching, queue_join,
+  matching_keys, count_matching, count_accounts, queue_join,
+  merge_group_account_total, duplicates_account_total,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

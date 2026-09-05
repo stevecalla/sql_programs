@@ -145,8 +145,10 @@ function mount(app) {
       const b = req.body || {};
       const view = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge-id' : 'duplicates';
       if (b.queue_filter) await mqueue.ensure_table();   // queue_join reads salesforce_merge_queue
-      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter, q: b.q });
-      res.json({ ok: true, count });
+      const o = { filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter, q: b.q };
+      const count = await reviews.count_matching(view, o);
+      const accounts = await reviews.count_accounts(view, o);
+      res.json({ ok: true, count, accounts });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Batch run — RESTORE job: fan out a restore over the given ids (same job model as merge), so the panel

@@ -42,7 +42,9 @@ async function dashboard_counts(query = real_query) {
     // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
     // that reconciles total accounts -> clusters -> pairs on the dashboard.
     safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
-    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c'),
+    // Per bucket: account count (COUNT(*)) AND group count (distinct merge IDs) — so the Merge-ID review
+    // cards can show "N accounts · G groups" and reconcile with Select Merges (e.g. in_both -> 3,689 · 1,928).
+    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n, COUNT(DISTINCT Salesforce_Merge_Id__c) AS g FROM `' + T_MR + '` GROUP BY Bucket__c'),
     // Pairs by signal — the per-signal link counts summed across clusters. A pair is one signal,
     // so these three sum to the total pairs (no multi bucket for pairs).
     safe('SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
@@ -69,7 +71,7 @@ async function dashboard_counts(query = real_query) {
   if (rClusters) out.clusters = Number(rClusters[0].n);
   if (rPairs) out.duplicate_pairs = Number(rPairs[0].n || 0);
   if (rAccts) out.accounts_in_clusters = Number(rAccts[0].n || 0);
-  if (rBuckets) out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
+  if (rBuckets) out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n), groups: Number(x.g || 0) }; });
   if (rSig && rSig[0]) out.signal_breakdown.pairs = {
     exact: Number(rSig[0].exact || 0), fuzzy: Number(rSig[0].fuzzy || 0), nickname: Number(rSig[0].nickname || 0),
   };

@@ -4,6 +4,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import ClusterModal from '../components/ClusterModal.jsx';
 import { MergeIdFunnel } from '../components/Funnels.jsx';
 import { api, sfRecordUrl } from '../lib/api.js';
+import { nfmt } from '../components/CountPair.jsx';
 
 const full_name = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim();
 const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString());
@@ -28,7 +29,7 @@ export default function MergeId() {
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   const fetcher = useCallback((p) =>
-    api.mergeId({ ...p, bucket, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total })),
+    api.mergeId({ ...p, bucket, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total, suffix: r.groups != null ? nfmt(r.groups) + ' groups' : '' })),   // "N rows (accounts) · G groups"
   [bucket, portalState]);
 
   const columns = useMemo(() => [
