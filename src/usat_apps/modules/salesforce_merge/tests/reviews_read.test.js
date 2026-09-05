@@ -137,7 +137,7 @@ describe('facets', () => {
       if (/Confidence_Tier__c/.test(sql)) return [{ v: 'exact' }, { v: 'fuzzy90' }];
       return [];
     };
-    const f = await reviews.facets('duplicates', q);
+    const f = await reviews.facets('duplicates', {}, q);
     assert.deepEqual(f.signal, ['exact only', 'fuzzy only']);  // blanks filtered out
     assert.deepEqual(f.tier, ['exact', 'fuzzy90']);
   });
