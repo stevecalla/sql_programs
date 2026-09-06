@@ -50,7 +50,7 @@ export function FilterSelect({ label, tip, opts, value, onChange, cellStyle }) {
     <div style={cellStyle ? { ...FCELL, ...cellStyle } : FCELL}>
       <FLabel title={tip}>{label}</FLabel>
       <select className="tb-select" style={FSEL} value={value} onChange={(e) => onChange(e.target.value)} title={tip}>
-        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        {(opts || []).map((o) => { const v = Array.isArray(o) ? o[0] : o.value; const l = Array.isArray(o) ? o[1] : o.label; return <option key={v} value={v}>{l}</option>; })}
       </select>
     </div>
   );

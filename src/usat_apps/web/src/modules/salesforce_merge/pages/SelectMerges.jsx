@@ -110,6 +110,7 @@ export default function SelectMerges() {
   const [tierState, setTierState] = useState(PREFS.tierState || '');    // Tier (confidence): exact/fuzzy/nickname (Duplicates source)
   const [simState, setSimState] = useState(PREFS.simState || '');       // min best name-similarity score (Duplicates source)
   const [sizeOpts, setSizeOpts] = useState([]);   // available cluster sizes (facets)
+  const [facetOpts, setFacetOpts] = useState({}); // full facets incl. per-option counts (bucket/foundation/portal)
   const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
 
   const [clusters, setClusters] = useState([]);
@@ -178,7 +179,7 @@ export default function SelectMerges() {
     const p = source === 'merge_id'
       ? api.mergeIdFacets({ q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, which_list: whichState })
       : api.duplicatesFacets({ q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, match_type: matchState, best_min: simState, tier: tierState });
-    p.then((r) => setSizeOpts((r.facets && r.facets.size) || [])).catch(() => setSizeOpts([]));   // labeled { value, label } size options (counts scoped to the active filters)
+    p.then((r) => { const f = r.facets || {}; setFacetOpts(f); setSizeOpts(f.size || []); }).catch(() => { setFacetOpts({}); setSizeOpts([]); });   // labeled options w/ per-option counts, scoped to active filters
   }, [source, filter, bkState, foundationState, portalState, whichState, midState, memState, matchState, simState, tierState]);
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
@@ -447,27 +448,27 @@ export default function SelectMerges() {
           <FilterSelect label="Size" tip={FILTER_TIP.size} opts={sizeOptions(sizeOpts)} value={sizeState} onChange={(v) => { setSizeState(v); setPage(1); }} />
           {source === 'group' && (
             <>
-              <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={FILTER_OPTS.signal} value={matchState} onChange={(v) => { setMatchState(v); setPage(1); }} />
-              <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={FILTER_OPTS.tier} value={tierState} onChange={(v) => { setTierState(v); setPage(1); }} />
+              <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={facetOpts.signal || FILTER_OPTS.signal} value={matchState} onChange={(v) => { setMatchState(v); setPage(1); }} />
+              <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={facetOpts.tier || FILTER_OPTS.tier} value={tierState} onChange={(v) => { setTierState(v); setPage(1); }} />
               <FilterSelect label="Min similarity" tip={FILTER_TIP.minSim} opts={FILTER_OPTS.minSim} value={simState} onChange={(v) => { setSimState(v); setPage(1); }} />
             </>
           )}
           {source === 'merge_id' && (
-            <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={FILTER_OPTS.whichList} value={whichState} onChange={(v) => { setWhichState(v); setPage(1); }} />
+            <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={facetOpts.which_list || FILTER_OPTS.whichList} value={whichState} onChange={(v) => { setWhichState(v); setPage(1); }} />
           )}
           {source === 'group' && (
             <>
-              <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={FILTER_OPTS.mergeId} value={midState} onChange={(v) => { setMidState(v); setPage(1); }} />
-              <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={FILTER_OPTS.member} value={memState} onChange={(v) => { setMemState(v); setPage(1); }} />
-              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
-              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
+              <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={facetOpts.merge_id_state || FILTER_OPTS.mergeId} value={midState} onChange={(v) => { setMidState(v); setPage(1); }} />
+              <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={facetOpts.member_number_state || FILTER_OPTS.member} value={memState} onChange={(v) => { setMemState(v); setPage(1); }} />
+              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={facetOpts.foundation_state || FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
+              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={facetOpts.portal_state || FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
             </>
           )}
           {source === 'merge_id' && (
             <>
-              <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={FILTER_OPTS.bucket} value={bkState} onChange={(v) => { setBkState(v); setPage(1); }} />
-              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
-              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
+              <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={facetOpts.bucket || FILTER_OPTS.bucket} value={bkState} onChange={(v) => { setBkState(v); setPage(1); }} />
+              <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={facetOpts.foundation_state || FILTER_OPTS.foundation} value={foundationState} onChange={(v) => { setFoundationState(v); setPage(1); }} />
+              <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={facetOpts.portal_state || FILTER_OPTS.portal} value={portalState} onChange={(v) => { setPortalState(v); setPage(1); }} />
             </>
           )}
           {anyFilter && (
