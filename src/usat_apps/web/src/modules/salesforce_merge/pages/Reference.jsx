@@ -4,6 +4,26 @@
 // no data calls.
 import { useState } from 'react';
 
+// Copyable SQL/code block (clipboard API with a textarea fallback for non-secure contexts).
+function SqlBlock({ sql, note }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    let ok = false;
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(sql); ok = true; } } catch (e) { ok = false; }
+    if (!ok) { try { const ta = document.createElement('textarea'); ta.value = sql; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); document.body.removeChild(ta); } catch (e) { ok = false; } }
+    setCopied(ok); setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div style={{ margin: '8px 0' }}>
+      <div style={{ position: 'relative' }}>
+        <button type="button" className="btn" style={{ position: 'absolute', top: 6, right: 6, width: 'auto', padding: '1px 8px', fontSize: 11 }} onClick={copy} title="Copy to clipboard">{copied ? 'copied ✓' : 'copy'}</button>
+        <pre style={{ margin: 0, padding: '10px 12px', paddingRight: 62, background: 'var(--code-bg, rgba(127,127,127,.12))', borderRadius: 8, overflowX: 'auto', fontSize: 12.5, lineHeight: 1.5, whiteSpace: 'pre' }}><code>{sql}</code></pre>
+      </div>
+      {note ? <div className="muted small" style={{ marginTop: 4 }}>{note}</div> : null}
+    </div>
+  );
+}
+
 const SECTIONS = [
   {
     title: "From accounts to unique duplicates",
@@ -37,6 +57,112 @@ const SECTIONS = [
           <div className="defs-row"><span className="defs-term">Multi-signal</span><span className="defs-body">a cluster flagged by more than one of the above.</span></div>
           <div className="defs-gate">Matched accounts are grouped into a cluster (one per unique duplicate), each given a confidence tier so you can trust the strong ones at a glance. This step is <strong>read-only</strong> — results are on the <strong>Duplicates</strong> page.</div>
         </div>
+      </>
+    ),
+  },
+  {
+    title: "The rules & SQL behind each match type",
+    text: "the rules and sql behind each match type. detection runs in the finder (node): exact keys on a precomputed field, fuzzy uses levenshtein similarity, nickname uses a curated nickname dataset, and clustering is union-find. exact is the only category with a true sql determinant; fuzzy and nickname are computed in code and sql only reads the stored label (match_composition__c / which_list__c). exact data cleaning: norm = trim + uppercase. clean_name = uppercase then strip everything except a-z and 0-9 so o'brien = obrien and anne marie = annemarie. zip = billing postal code or mailing if blank, first 5 digits (trim_zip5), uppercased (composite_zip). the exact key = cleaned last | cleaned first | gender | birthdate | zip5, and every field must be non-blank (the gate has_required_exact_fields) or the key is blank and the record can't be an exact duplicate. exact_duplicate_key column is precomputed in the snapshot. sql: group by exact_duplicate_key where <> '' having count > 1. fuzzy: combined name score first x 0.45 + last x 0.55 >= 90, keeping the gender+birthdate+zip block. nickname: nickname-equivalent first name plus last name match, same block. multi-signal: a cluster flagged by more than one signal. by match signal groups the consolidated clusters by match_composition__c. merge-id buckets group the review by bucket__c; merge-id groups group by salesforce_merge_id__c. tables: salesforce_account_duplicate_snapshot, salesforce_duplicate_consolidated_cluster, salesforce_duplicate_merge_id_review.",
+    body: (
+      <>
+        <p>
+          Detection runs in the finder (Node): <strong>exact</strong> keys on a precomputed field,
+          <strong> fuzzy</strong> uses Levenshtein similarity, <strong>nickname</strong> uses a curated
+          nickname dataset, and clusters are built with union-find. <strong>Exact is the only category with a
+          true SQL determinant</strong>; fuzzy &amp; nickname are computed in code, so SQL only reads the label
+          the finder stored (<code>Match_Composition__c</code> / <code>Which_List__c</code>).
+        </p>
+
+        <p><strong>Exact match — the precise rule</strong></p>
+        <p className="muted small">
+          It all lives in one function, <code>make_exact_duplicate_key</code> in <code>normalize.js</code> —
+          the single source of truth; <code>exact.js</code>, the SQL path, and the snapshot's precomputed
+          <code> exact_duplicate_key</code> column all use it. <strong>Two records are exact duplicates iff
+          they produce the same non-blank key.</strong> The key is five normalized identity fields joined
+          with <code>|</code>:
+        </p>
+        <SqlBlock sql={`cleanName(LastName) | cleanName(FirstName) | GENDER | BIRTHDATE | ZIP5`} />
+
+        <p><strong>How each field is normalized</strong></p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term">Last / First name</span><span className="defs-body"><code>clean_name</code>: uppercase, then strip everything except A–Z and 0–9. Punctuation and spaces vanish: <code>O'Brien</code> → <code>OBRIEN</code>, <code>Anne Marie</code> → <code>ANNEMARIE</code> — so they match their unpunctuated twins.</span></div>
+          <div className="defs-row"><span className="defs-term">Gender</span><span className="defs-body"><code>cfg_Gender_Identity__pc</code> → <code>norm</code>: trim + uppercase.</span></div>
+          <div className="defs-row"><span className="defs-term">Birthdate</span><span className="defs-body"><code>PersonBirthdate</code> → <code>norm</code>: trim + uppercase.</span></div>
+          <div className="defs-row"><span className="defs-term">ZIP</span><span className="defs-body"><code>composite_zip</code>: take <strong>Billing</strong> postal code, or <strong>Mailing</strong> if billing is blank; <code>trim_zip5</code> keeps the first 5 digits when the value starts with 5 digits (<code>80919-1234</code> and <code>809191234</code> → <code>80919</code>); non-US codes (e.g. <code>K1A 0B1</code>) pass through; then uppercase.</span></div>
+          <div className="defs-gate"><strong>Eligibility gate</strong> (<code>has_required_exact_fields</code>): all five must be non-blank (cleaned last, cleaned first, gender, birthdate, ZIP). If any is blank the key returns <code>""</code>, and a blank key never groups — exactly what the SQL path filters on (<code>WHERE exact_duplicate_key &lt;&gt; ''</code>). <strong>Grouping:</strong> records sharing the same non-blank key, with 2+ members, form an exact group.</div>
+        </div>
+
+        <p><strong>The actual code</strong> <span className="muted small">(<code>normalize.js</code> — the single source of truth)</span></p>
+        <SqlBlock sql={`// clean rules\nfunction norm(v)       { return (v || "").trim().toUpperCase(); }\nfunction clean_name(v) { return norm(v).replace(/[^A-Z0-9]/g, "").trim(); }\n\nfunction trim_zip5(v) {                 // "80919-1234" / "809191234" -> "80919"; non-US kept\n  const t = (v || "").trim();\n  const m = t.match(/^(\\d{5})/);\n  return m ? m[1] : t;\n}\nfunction composite_zip(row) {           // billing, else mailing; 5 digits; uppercased\n  const billing = (row.BillingPostalCode || "").trim();\n  const mailing = (row.PersonMailingPostalCode || "").trim();\n  return norm(trim_zip5(billing !== "" ? billing : mailing));\n}\n\n// match rule — the gate: all five identity fields must be present\nfunction has_required_exact_fields(row) {\n  return clean_name(row.LastName) !== "" &&\n         clean_name(row.FirstName) !== "" &&\n         norm(row.cfg_Gender_Identity__pc) !== "" &&\n         norm(row.PersonBirthdate) !== "" &&\n         composite_zip(row) !== "";\n}\n\n// match rule — the key: blank (never groups) unless the gate passes\nfunction make_exact_duplicate_key(row) {\n  if (!has_required_exact_fields(row)) return "";\n  return [\n    clean_name(row.LastName),\n    clean_name(row.FirstName),\n    norm(row.cfg_Gender_Identity__pc),\n    norm(row.PersonBirthdate),\n    composite_zip(row),\n  ].join("|");\n}`} />
+
+        <p><strong>Worked example</strong> — both rows normalize to the same key:</p>
+        <SqlBlock sql={`Last "O'Brien"  First "Anne-Marie"  Gender F  DOB 1990-05-02  Billing 80919-1234\nLast "Obrien"   First "Anne Marie"  Gender f  DOB 1990-05-02  Mailing 80919\n   => both keys = OBRIEN|ANNEMARIE|F|1990-05-02|80919   (same key => exact duplicates)`} />
+
+        <p><strong>Exact match — SQL</strong> <span className="muted small">(the actual rule, against the precomputed key)</span></p>
+        <SqlBlock
+          sql={`-- Exact duplicate groups: 2+ records sharing the same cleaned identity key.\nSELECT exact_duplicate_key, COUNT(*) AS records\nFROM   salesforce_account_duplicate_snapshot\nWHERE  exact_duplicate_key <> ''      -- non-blank = all 5 identity fields present (the gate)\nGROUP BY exact_duplicate_key\nHAVING COUNT(*) > 1\nORDER BY MIN(load_sequence);`}
+          note={<>The key encodes the cleaning above: cleaned last · cleaned first · gender · birthdate · ZIP5.</>}
+        />
+        <p className="muted small">
+          <strong>Net:</strong> exact = identical on all five cleaned identity fields (names stripped to
+          alphanumerics, ZIP to 5 digits), and none of the five may be blank. Fuzzy &amp; nickname then relax
+          only the <em>name</em> comparison while keeping the gender + birthdate + ZIP block.
+        </p>
+
+        <p><strong>Shared block — fuzzy &amp; nickname</strong> <span className="muted small">(clean rules)</span></p>
+        <p className="muted small">
+          Fuzzy and nickname reuse the <em>same cleaning</em> as exact and keep the mandatory
+          <strong> gender + birthdate + ZIP5</strong> block — the <em>rule-block key</em>
+          (<code>gender | birthdate | zip5</code>, built by <code>make_rule_key</code>). Two records
+          only become candidates when they share that block; the signals then relax <em>only the name
+          comparison</em>. A name match alone never creates a duplicate.
+        </p>
+
+        <p><strong>Fuzzy match — logic</strong> <span className="muted small">(fuzzy.js; computed in the finder)</span></p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term">Candidate</span><span className="defs-body">same rule-block key (gender + birthdate + ZIP5).</span></div>
+          <div className="defs-row"><span className="defs-term">Score</span><span className="defs-body">each name scored 0–100 by Levenshtein similarity; combined = <code>first × 0.45 + last × 0.55</code>.</span></div>
+          <div className="defs-row"><span className="defs-term">Match</span><span className="defs-body">a pair matches when the combined score is <strong>≥ 90</strong>.</span></div>
+        </div>
+        <SqlBlock sql={`-- Fuzzy is computed in code (Levenshtein), not SQL. Read clusters that INVOLVE the fuzzy signal:\nSELECT * FROM salesforce_duplicate_consolidated_cluster WHERE Match_Composition__c LIKE '%fuzzy%';`} />
+
+        <p><strong>Nickname match — logic</strong> <span className="muted small">(nicknames.js; computed in the finder)</span></p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term">Candidate</span><span className="defs-body">same rule-block key (gender + birthdate + ZIP5).</span></div>
+          <div className="defs-row"><span className="defs-term">First name</span><span className="defs-body">treated as interchangeable when they're nickname-equivalents via the curated <code>nicknames-curated</code> dataset, made <strong>symmetric</strong> (Bob ↔ Robert ↔ Bobby).</span></div>
+          <div className="defs-row"><span className="defs-term">Last name</span><span className="defs-body">must still match (cleaned exact) or score ≥ 90.</span></div>
+          <div className="defs-gate">Nickname relaxes <strong>only the first name</strong>; everything else is the same discipline.</div>
+        </div>
+        <SqlBlock sql={`SELECT * FROM salesforce_duplicate_consolidated_cluster WHERE Match_Composition__c LIKE '%nickname%';`} />
+
+        <p><strong>How signals become clusters &amp; labels</strong> <span className="muted small">(consolidate.js)</span></p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term">Precedence ladder</span><span className="defs-body">every matched pair (an "edge") is labeled <strong>exact → fuzzy(90) → nickname</strong>; a pair that qualifies more than one way carries both flags.</span></div>
+          <div className="defs-row"><span className="defs-term">Clustering</span><span className="defs-body">all edges feed a <strong>union-find</strong> — connected records collapse into one cluster (one unique duplicate).</span></div>
+          <div className="defs-row"><span className="defs-term">Match_Composition__c</span><span className="defs-body">the cluster's label: "exact only" / "fuzzy only" / "nickname only", or a mix like "exact + nickname". A mix = <strong>multi-signal</strong>.</span></div>
+          <div className="defs-row"><span className="defs-term">Confidence_Tier__c</span><span className="defs-body">the cluster's single strongest signal (exact &gt; fuzzy &gt; nickname).</span></div>
+          <div className="defs-row"><span className="defs-term">Which_List__c</span><span className="defs-body">per-<em>account</em> — which signal(s) flagged that account (drives the merge-id "Which list" filter).</span></div>
+        </div>
+
+        <p><strong>Multi-signal — SQL</strong></p>
+        <SqlBlock
+          sql={`-- A cluster flagged by more than one signal (its composition is a mix like "exact + nickname").\nSELECT *\nFROM   salesforce_duplicate_consolidated_cluster\nWHERE  Match_Composition__c NOT IN ('exact only', 'fuzzy only', 'nickname only');`}
+        />
+
+        <p><strong>By match signal</strong> <span className="muted small">(the Dashboard breakdown)</span></p>
+        <SqlBlock
+          sql={`SELECT Match_Composition__c AS composition,\n       COUNT(*)                                     AS clusters,\n       SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts\nFROM   salesforce_duplicate_consolidated_cluster\nGROUP BY Match_Composition__c;\n-- "exact only" / "fuzzy only" / "nickname only"; any mix folds to "multi" in code.`}
+        />
+
+        <p><strong>Merge-ID buckets &amp; groups</strong></p>
+        <SqlBlock
+          sql={`-- Buckets (accounts) + distinct merge-id groups per bucket:\nSELECT Bucket__c,\n       COUNT(*)                               AS accounts,\n       COUNT(DISTINCT Salesforce_Merge_Id__c) AS groups\nFROM   salesforce_duplicate_merge_id_review\nWHERE  Salesforce_Merge_Id__c <> ''\nGROUP BY Bucket__c;\n\n-- Mergeable merge-id groups (2+ accounts sharing a merge id):\nSELECT Salesforce_Merge_Id__c, COUNT(*) AS accounts\nFROM   salesforce_duplicate_merge_id_review\nWHERE  Salesforce_Merge_Id__c <> ''\nGROUP BY Salesforce_Merge_Id__c\nHAVING COUNT(*) >= 2;`}
+        />
+        <p className="muted small">
+          Table names come from config; shown here as their default names. These are illustrative read
+          queries — the authoritative fuzzy/nickname logic lives in the finder (<code>fuzzy.js</code>,
+          <code> nicknames.js</code>, <code>consolidate.js</code>).
+        </p>
       </>
     ),
   },
@@ -326,7 +452,7 @@ const SECTIONS = [
 
 export default function Reference() {
   const [q, setQ] = useState('');
-  const [collapsed, setCollapsed] = useState(() => new Set()); // by title; empty = all open
+  const [collapsed, setCollapsed] = useState(() => new Set(SECTIONS.map((s) => s.title))); // default: all collapsed
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const match = (sec) => !terms.length || terms.every((t) => (sec.title + ' ' + sec.text).toLowerCase().includes(t));
   const shown = SECTIONS.filter(match);
