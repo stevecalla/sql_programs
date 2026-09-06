@@ -266,7 +266,7 @@ export default function MergeOps() {
     const p = rSource === 'merge-id'
       ? api.mergeIdFacets({ q: rSearch, bucket: rBucket, foundation_state: rFoundation, portal_state: rPortal, which_list: rWhichList })
       : api.duplicatesFacets({ q: rSearch, merge_id_state: rMergeId, member_number_state: rMember, foundation_state: rFoundation, portal_state: rPortal, match_type: rSignal, best_min: rMinSim, tier: rTier });
-    p.then((r) => setFacets(r.facets || {})).catch(() => setFacets({}));   // size counts scoped to the active filters
+    p.then((r) => { const f = r.facets || {}; setFacets({ ...f, ...(f.filter_counts || {}) }); }).catch(() => setFacets({}));   // size + per-option counts, scoped to the active filters
   }, [batchMode, rSource, rSearch, rBucket, rFoundation, rPortal, rWhichList, rMergeId, rMember, rSignal, rMinSim, rTier]);
   // Build the filter set the same way Select Merges does (filter_cols + filter_map keys) — shared by the
   // live count and the run.

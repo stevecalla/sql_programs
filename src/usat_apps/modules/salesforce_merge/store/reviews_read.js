@@ -136,7 +136,9 @@ async function facets(view, opts = {}, query = real_query) {
   } catch (e) { /* size facet optional */ }
 
   // Categorical filter dropdowns get a live group COUNT per option, each scoped to the OTHER active filters
-  // (the option's own dimension is excluded, same as the size facet). Rendered as labeled { value, label }.
+  // (the option's own dimension is excluded, same as the size facet). Namespaced under `filter_counts` so
+  // they don't clobber the raw scalar facets the DataTable column filters use. Labeled { value, label }.
+  const fc = (out.filter_counts = {});
   if (view === 'merge-id') {
     const base = flatten_mergeid_opts(opts);
     // Bucket (row-level): distinct merge IDs per bucket, scoped to the other filters.
@@ -144,7 +146,7 @@ async function facets(view, opts = {}, query = real_query) {
       const c = merge_group_clauses({ ...base, bucket: undefined });
       const r = await query("SELECT Bucket__c AS v, COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + c.T + "`" + c.join_sql + " " + c.where_sql + " GROUP BY Bucket__c", c.params);
       const m = {}; for (const x of (r || [])) m[x.v] = Number(x.n);
-      out.bucket = [{ value: '', label: 'All' }, { value: 'in_both', label: 'In both (' + (m.in_both || 0).toLocaleString() + ')' }, { value: 'sf_only', label: 'ID only (' + (m.sf_only || 0).toLocaleString() + ')' }];
+      fc.bucket = [{ value: '', label: 'All' }, { value: 'in_both', label: 'In both (' + (m.in_both || 0).toLocaleString() + ')' }, { value: 'sf_only', label: 'ID only (' + (m.sf_only || 0).toLocaleString() + ')' }];
     } catch (e) { /* optional */ }
     // Group-level has/none facets (foundation, portal): count groups where ANY member carries the flag.
     const hasNone = async (excludeKey, expr, hasLabel, noneLabel) => {
@@ -153,8 +155,8 @@ async function facets(view, opts = {}, query = real_query) {
       const h = Number((r && r[0] && r[0].h) || 0), z = Number((r && r[0] && r[0].z) || 0);
       return [{ value: '', label: 'All' }, { value: 'has', label: hasLabel + ' (' + h.toLocaleString() + ')' }, { value: 'none', label: noneLabel + ' (' + z.toLocaleString() + ')' }];
     };
-    try { out.foundation_state = await hasNone('foundation_state', "SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END)", 'Is foundation', 'Not foundation'); } catch (e) { /* optional */ }
-    try { out.portal_state = await hasNone('portal_state', "SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END)", 'Has portal', 'No portal'); } catch (e) { /* optional */ }
+    try { fc.foundation_state =await hasNone('foundation_state', "SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END)", 'Is foundation', 'Not foundation'); } catch (e) { /* optional */ }
+    try { fc.portal_state =await hasNone('portal_state', "SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END)", 'Has portal', 'No portal'); } catch (e) { /* optional */ }
     // Which list (per-signal): groups where ANY member was flagged by that signal.
     try {
       const c = merge_group_clauses({ ...base, which_list: undefined });
@@ -162,7 +164,7 @@ async function facets(view, opts = {}, query = real_query) {
         "MAX(Which_List__c LIKE '%exact%') AS ex, MAX(Which_List__c LIKE '%fuzzy%') AS fz, MAX(Which_List__c LIKE '%nickname%') AS nk " +
         "FROM `" + c.T + "`" + c.join_sql + " " + c.where_sql + " GROUP BY Salesforce_Merge_Id__c" + c.having_sql + ") x", c.params);
       const w = (r && r[0]) || {};
-      out.which_list = [{ value: '', label: 'Any list' }, { value: 'exact', label: 'Exact (' + Number(w.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(w.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(w.nk || 0).toLocaleString() + ')' }];
+      fc.which_list = [{ value: '', label: 'Any list' }, { value: 'exact', label: 'Exact (' + Number(w.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(w.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(w.nk || 0).toLocaleString() + ')' }];
     } catch (e) { /* optional */ }
   } else if (view === 'duplicates') {
     // Consolidated clusters (one row per cluster). Each option's count is scoped to the OTHER filters.
@@ -174,13 +176,13 @@ async function facets(view, opts = {}, query = real_query) {
     };
     const hn = (x, hasLabel, noneLabel) => [{ value: '', label: 'All' }, { value: 'has', label: hasLabel + ' (' + Number(x.h || 0).toLocaleString() + ')' }, { value: 'none', label: noneLabel + ' (' + Number(x.z || 0).toLocaleString() + ')' }];
     try { const x = await dq('match_type', "SUM(Match_Composition__c LIKE '%exact%') AS ex, SUM(Match_Composition__c LIKE '%fuzzy%') AS fz, SUM(Match_Composition__c LIKE '%nickname%') AS nk");
-      out.signal = [{ value: '', label: 'Any signal' }, { value: 'exact', label: 'Exact (' + Number(x.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(x.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(x.nk || 0).toLocaleString() + ')' }]; } catch (e) { /* optional */ }
+      fc.signal = [{ value: '', label: 'Any signal' }, { value: 'exact', label: 'Exact (' + Number(x.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(x.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(x.nk || 0).toLocaleString() + ')' }]; } catch (e) { /* optional */ }
     try { const x = await dq('tier', "SUM(LOWER(Confidence_Tier__c) = 'exact') AS ex, SUM(LOWER(Confidence_Tier__c) = 'fuzzy') AS fz, SUM(LOWER(Confidence_Tier__c) = 'nickname') AS nk");
-      out.tier = [{ value: '', label: 'Any tier' }, { value: 'exact', label: 'Exact (' + Number(x.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(x.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(x.nk || 0).toLocaleString() + ')' }]; } catch (e) { /* optional */ }
-    try { out.merge_id_state = hn(await dq('merge_id_state', "SUM(REPLACE(Merge_Ids__c, ';', '') <> '') AS h, SUM(Merge_Ids__c IS NULL OR REPLACE(Merge_Ids__c, ';', '') = '') AS z"), 'Has merge ID', 'No merge ID'); } catch (e) { /* optional */ }
-    try { out.member_number_state = hn(await dq('member_number_state', "SUM(REPLACE(Member_Numbers__c, ';', '') <> '') AS h, SUM(Member_Numbers__c IS NULL OR REPLACE(Member_Numbers__c, ';', '') = '') AS z"), 'Has member #', 'No member #'); } catch (e) { /* optional */ }
-    try { out.foundation_state = hn(await dq('foundation_state', "SUM(Foundation_Constituents__c LIKE '%true%') AS h, SUM(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%') AS z"), 'Is foundation', 'Not foundation'); } catch (e) { /* optional */ }
-    try { out.portal_state = hn(await dq('portal_state', "SUM(Has_Portal_Account__c = '1') AS h, SUM(Has_Portal_Account__c IS NULL OR Has_Portal_Account__c <> '1') AS z"), 'Has portal', 'No portal'); } catch (e) { /* optional */ }
+      fc.tier = [{ value: '', label: 'Any tier' }, { value: 'exact', label: 'Exact (' + Number(x.ex || 0).toLocaleString() + ')' }, { value: 'fuzzy', label: 'Fuzzy (' + Number(x.fz || 0).toLocaleString() + ')' }, { value: 'nickname', label: 'Nickname (' + Number(x.nk || 0).toLocaleString() + ')' }]; } catch (e) { /* optional */ }
+    try { fc.merge_id_state = hn(await dq('merge_id_state', "SUM(REPLACE(Merge_Ids__c, ';', '') <> '') AS h, SUM(Merge_Ids__c IS NULL OR REPLACE(Merge_Ids__c, ';', '') = '') AS z"), 'Has merge ID', 'No merge ID'); } catch (e) { /* optional */ }
+    try { fc.member_number_state = hn(await dq('member_number_state', "SUM(REPLACE(Member_Numbers__c, ';', '') <> '') AS h, SUM(Member_Numbers__c IS NULL OR REPLACE(Member_Numbers__c, ';', '') = '') AS z"), 'Has member #', 'No member #'); } catch (e) { /* optional */ }
+    try { fc.foundation_state =hn(await dq('foundation_state', "SUM(Foundation_Constituents__c LIKE '%true%') AS h, SUM(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%') AS z"), 'Is foundation', 'Not foundation'); } catch (e) { /* optional */ }
+    try { fc.portal_state =hn(await dq('portal_state', "SUM(Has_Portal_Account__c = '1') AS h, SUM(Has_Portal_Account__c IS NULL OR Has_Portal_Account__c <> '1') AS z"), 'Has portal', 'No portal'); } catch (e) { /* optional */ }
   }
   return out;
 }

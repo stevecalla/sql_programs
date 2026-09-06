@@ -179,7 +179,7 @@ export default function SelectMerges() {
     const p = source === 'merge_id'
       ? api.mergeIdFacets({ q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, which_list: whichState })
       : api.duplicatesFacets({ q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, match_type: matchState, best_min: simState, tier: tierState });
-    p.then((r) => { const f = r.facets || {}; setFacetOpts(f); setSizeOpts(f.size || []); }).catch(() => { setFacetOpts({}); setSizeOpts([]); });   // labeled options w/ per-option counts, scoped to active filters
+    p.then((r) => { const f = r.facets || {}; setFacetOpts(f.filter_counts || {}); setSizeOpts(f.size || []); }).catch(() => { setFacetOpts({}); setSizeOpts([]); });   // labeled options w/ per-option counts, scoped to active filters
   }, [source, filter, bkState, foundationState, portalState, whichState, midState, memState, matchState, simState, tierState]);
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
