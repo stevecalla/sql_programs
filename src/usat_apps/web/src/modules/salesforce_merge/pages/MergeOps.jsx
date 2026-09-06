@@ -266,7 +266,7 @@ export default function MergeOps() {
     const p = rSource === 'merge-id'
       ? api.mergeIdFacets({ q: rSearch, bucket: rBucket, foundation_state: rFoundation, portal_state: rPortal, which_list: rWhichList })
       : api.duplicatesFacets({ q: rSearch, merge_id_state: rMergeId, member_number_state: rMember, foundation_state: rFoundation, portal_state: rPortal, match_type: rSignal, best_min: rMinSim, tier: rTier });
-    p.then((r) => setFacets(r.facets || {})).catch(() => setFacets({}));   // size counts scoped to the active filters
+    p.then((r) => { const f = r.facets || {}; setFacets({ ...f, ...(f.filter_counts || {}) }); }).catch(() => setFacets({}));   // size + per-option counts, scoped to the active filters
   }, [batchMode, rSource, rSearch, rBucket, rFoundation, rPortal, rWhichList, rMergeId, rMember, rSignal, rMinSim, rTier]);
   // Build the filter set the same way Select Merges does (filter_cols + filter_map keys) — shared by the
   // live count and the run.
@@ -550,20 +550,20 @@ export default function MergeOps() {
                 <FilterSelect label="Size" tip={FILTER_TIP.size} opts={sizeOptions(facets.size)} value={rSize} onChange={setRSize} />
                 {rSource === 'duplicate' ? (
                   <>
-                    <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={FILTER_OPTS.signal} value={rSignal} onChange={setRSignal} />
-                    <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={FILTER_OPTS.tier} value={rTier} onChange={setRTier} />
+                    <FilterSelect label="Signal" tip={FILTER_TIP.signal} opts={facets.signal || FILTER_OPTS.signal} value={rSignal} onChange={setRSignal} />
+                    <FilterSelect label="Tier" tip={FILTER_TIP.tier} opts={facets.tier || FILTER_OPTS.tier} value={rTier} onChange={setRTier} />
                     <FilterSelect label="Min similarity" tip={FILTER_TIP.minSim} opts={FILTER_OPTS.minSim} value={rMinSim} onChange={setRMinSim} />
-                    <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={FILTER_OPTS.mergeId} value={rMergeId} onChange={setRMergeId} />
-                    <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={FILTER_OPTS.member} value={rMember} onChange={setRMember} />
+                    <FilterSelect label="Merge ID" tip={FILTER_TIP.mergeId} opts={facets.merge_id_state || FILTER_OPTS.mergeId} value={rMergeId} onChange={setRMergeId} />
+                    <FilterSelect label="Membership #" tip={FILTER_TIP.member} opts={facets.member_number_state || FILTER_OPTS.member} value={rMember} onChange={setRMember} />
                   </>
                 ) : (
                   <>
-                    <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={FILTER_OPTS.whichList} value={rWhichList} onChange={setRWhichList} />
-                    <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={FILTER_OPTS.bucket} value={rBucket} onChange={setRBucket} />
+                    <FilterSelect label="Which list" tip={FILTER_TIP.whichList} opts={facets.which_list || FILTER_OPTS.whichList} value={rWhichList} onChange={setRWhichList} />
+                    <FilterSelect label="Bucket" tip={FILTER_TIP.bucket} opts={facets.bucket || FILTER_OPTS.bucket} value={rBucket} onChange={setRBucket} />
                   </>
                 )}
-                <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={FILTER_OPTS.foundation} value={rFoundation} onChange={setRFoundation} />
-                <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={FILTER_OPTS.portal} value={rPortal} onChange={setRPortal} />
+                <FilterSelect label="Foundation" tip={FILTER_TIP.foundation} opts={facets.foundation_state || FILTER_OPTS.foundation} value={rFoundation} onChange={setRFoundation} />
+                <FilterSelect label="Customer portal" tip={FILTER_TIP.portal} opts={facets.portal_state || FILTER_OPTS.portal} value={rPortal} onChange={setRPortal} />
                 {anyRandomFilter && <div style={{ alignSelf: 'flex-end' }}><button type="button" className="linkbtn" onClick={clearRandomFilters} title="Reset all filters to permissive (Count and Seed are left as-is)">Clear filters</button></div>}
               </div>
             </div>
