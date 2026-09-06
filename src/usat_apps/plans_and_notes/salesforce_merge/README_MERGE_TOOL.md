@@ -376,6 +376,39 @@ which it doesn't — in both directions. All of this is computed from existing t
 Net: `sf_only` / "missing" = merge IDs **not** in our duplicates (investigate); `in_both` /
 "matched" = merge IDs **in** our duplicates (agreement).
 
+### Counting model — one definition, reconciles across every panel (IMPLEMENTED)
+
+The review counts are built so a reviewer can move between the Dashboard, Select Merges, and Merge
+Ops and see numbers that line up. The rules:
+
+- **A "group" = a merge-id group = every account sharing one merge ID** (any size); its **size** is
+  that account count. Every account with a merge ID belongs to exactly one group, so **accounts and
+  groups reconcile by bucket and overall** — the Dashboard's per-bucket card, the Select Merges list
+  header for that bucket, and the Merge Ops pool all show the same pair. Same for the duplicate side
+  (cluster = the group; clusters are always 2+, so no singleton wrinkle there).
+- **"Mergeable" = size ≥ 2**, exposed as the **Size** filter (Size = 1 = singletons, a merge ID on a
+  single account = nothing to merge). It is a *filter*, not a separate count. The **batch sampler
+  only ever draws from mergeable (2+)** sets (you can't merge a singleton), which is the one place a
+  2+ gate is applied by default (`opts.mergeable` on `merge_group_clauses`).
+- **Single source of truth.** All counts flow through the shared builders in `store/reviews_read.js`:
+  `merge_group_clauses` / `merge_group_count` / `merge_group_keys` / `merge_group_account_total`
+  (merge-id) and `build_clauses` + `duplicates_account_total` (duplicates). The Dashboard, panels,
+  and sampler all call these — no panel computes its own, so they can't drift.
+- **Account companions.** List responses carry both the group total and an **account** companion
+  (`accounts` on `list_duplicates`/`list_merge_groups`, `groups` on `list_merge_id`), shown as
+  "N groups · M accounts" (or the reverse). `count_accounts` is the sampler's account companion.
+- **Queue filter (staged/unstaged)** is one shared SQL predicate, `queue_join`, applied in-SQL by
+  both the Select Merges paths and the sampler (single definition of "staged" = active
+  queued/approved, or latest lifecycle done/recreated; restored/failed re-enter the pool).
+- **Dynamic per-option filter counts.** `facets(view, opts)` returns the **Size** options labeled
+  with counts *and* a `filter_counts` map (Bucket / Foundation / Customer portal / Which list /
+  Signal / Tier / Merge ID / Membership #) — each option's count **scoped to the other active
+  filters** (the option's own dimension excluded), re-fetched as filters change. Namespaced under
+  `filter_counts` so it doesn't clobber the raw scalar facets the DataTable column filters use.
+- **Streaming exports.** The review CSV export streams row-by-row (no 100k cap; memory-flat) and the
+  Excel export streams via `ExcelJS.stream.xlsx.WorkbookWriter` (capped only by Excel's ~1,048,576
+  rows/sheet). See `store/db.js:stream_rows` + `api.js:stream_csv`/`stream_xlsx`.
+
 ## Table conventions — search + sort everywhere
 
 Every data table in the tool (duplicates, merge-ID, all accounts, history) supports:
